@@ -19,8 +19,8 @@ class ListingData:
     beds: int
     baths: int
     persons: int
-    room_overview: list[str]
-    property_features: list[str]
+    room_overview: str
+    property_features: str
     property_about: str
     flatmates_about: str
 
@@ -157,7 +157,7 @@ class FlatmatesScraper:
                 By.XPATH,
                 "//div[starts-with(@class, 'styles__featureStyles__titleContainer___')]//div[starts-with(@class, 'styles__detail___')]",
             )
-            property_features = [await f.text for f in property_features_el]
+            property_features = ", ".join([await f.text for f in property_features_el])
 
             room_overview_els = await listing_data_el.find_elements(
                 By.XPATH,
@@ -174,7 +174,7 @@ class FlatmatesScraper:
                 room_overview.append(
                     f"{await title_el.text}{f' ({await subtitle_el.text})' if (await subtitle_el.text).strip() else ''}"
                 )
-            room_overview = room_overview
+            room_overview = ", ".join(room_overview)
 
             flatmates_about_el = await listing_data_el.find_element(
                 By.XPATH,
