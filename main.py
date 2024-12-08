@@ -133,32 +133,47 @@ class FlatmatesScraper:
             listing_data_el = await self.driver.find_element(
                 By.XPATH, "//*[@initial_tracking_context_schema_data]", timeout=120
             )
+        except NoSuchElementException:
+            return logger.warning("No such element found for listing data")
 
+        try:
             price_per_week_el = await listing_data_el.find_element(
                 By.XPATH,
                 ".//a[starts-with(@class, 'styles__roomRent___')]/div[starts-with(@class, 'styles__value___')]",
             )
             price_per_week = int(re.search(r"\d+", await price_per_week_el.text).group())
+        except NoSuchElementException:
+            price_per_week = "N/A"
 
+        try:
             property_main_features = await listing_data_el.find_elements(
                 By.XPATH,
                 ".//div[starts-with(@class, 'styles__propertyMainFeatures___')]/div[starts-with(@class, 'styles__propertyFeature___')]/div[starts-with(@class, 'styles__value___')]",
             )
-            beds = await property_main_features[0].text if len(property_main_features) > 0 else "N/A"
+            beds = await property_main_features[0].text if property_main_features else "N/A"
             baths = await property_main_features[1].text if len(property_main_features) > 1 else "N/A"
             persons = await property_main_features[2].text if len(property_main_features) > 2 else "N/A"
+        except NoSuchElementException:
+            beds, baths, persons = "N/A", "N/A", "N/A"
 
+        try:
             property_about_el = await listing_data_el.find_element(
                 By.XPATH, "//div[starts-with(@class, 'styles__description__wrapper')]/p"
             )
             property_about = await property_about_el.text
+        except NoSuchElementException:
+            property_about = "N/A"
 
+        try:
             property_features_el = await listing_data_el.find_elements(
                 By.XPATH,
                 "//div[starts-with(@class, 'styles__featureStyles__titleContainer___')]//div[starts-with(@class, 'styles__detail___')]",
             )
             property_features = ", ".join([await f.text for f in property_features_el])
+        except NoSuchElementException:
+            property_features = "N/A"
 
+        try:
             room_overview_els = await listing_data_el.find_elements(
                 By.XPATH,
                 "//div[starts-with(@class, 'styles__roomDetails___')]//div[starts-with(@class, 'styles__detail___')]",
@@ -175,27 +190,28 @@ class FlatmatesScraper:
                     f"{await title_el.text}{f' ({await subtitle_el.text})' if (await subtitle_el.text).strip() else ''}"
                 )
             room_overview = ", ".join(room_overview)
+        except NoSuchElementException:
+            room_overview = "N/A"
 
+        try:
             flatmates_about_el = await listing_data_el.find_element(
                 By.XPATH,
                 "//h3[text()='About the flatmates']/following-sibling::div[starts-with(@class, 'styles__description__wrapper___')]",
             )
             flatmates_about = await flatmates_about_el.text
-
-            return ListingData(
-                price_per_week=price_per_week,
-                beds=beds,
-                baths=baths,
-                persons=persons,
-                room_overview=room_overview,
-                property_features=property_features,
-                property_about=property_about,
-                flatmates_about=flatmates_about,
-            )
-
         except NoSuchElementException:
-            logger.warning(f"Unable to find listing data from page: {listing_link}")
-            return
+            flatmates_about = "N/A"
+
+        return ListingData(
+            price_per_week=price_per_week,
+            beds=beds,
+            baths=baths,
+            persons=persons,
+            room_overview=room_overview,
+            property_features=property_features,
+            property_about=property_about,
+            flatmates_about=flatmates_about,
+        )
 
     def read_scraped_links(self):
         if not os.path.exists("scraped_links.txt"):
