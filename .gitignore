@@ -1,0 +1,7 @@
+__pycache__/
+downloaded_files/
+env/
+listing_data.csv
+listing_links.json
+scraped_links.txt
+___*
