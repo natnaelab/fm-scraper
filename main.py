@@ -48,16 +48,16 @@ class FlatmatesScraper:
             await self.driver.wait_for_cdp("Page.domContentEventFired", timeout=120)
             logger.info("Loaded the base page")
 
-            # all_listing_links = await self.extract_all_listing_links()
-            # all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
-            # logger.info(f"Extracted {len(all_listing_links)} new listing links in total from pages")
+            all_listing_links = await self.extract_all_listing_links()
+            all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
+            logger.info(f"Extracted {len(all_listing_links)} new listing links in total from pages")
 
             # get listing links from file instead, uncomment the following code if you already have listing links
-            if os.path.exists("listing_links.json"):
-                with open("listing_links.json", "r") as f:
-                    all_listing_links = json.load(f)
-                    all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
-                    logger.info(f"Loaded {len(all_listing_links)} listing links from listing_links.json")
+            # if os.path.exists("listing_links.json"):
+            #     with open("listing_links.json", "r") as f:
+            #         all_listing_links = json.load(f)
+            #         all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
+            #         logger.info(f"Loaded {len(all_listing_links)} listing links from listing_links.json")
 
             if not os.path.exists("listing_data.csv"):
                 with open("listing_data.csv", "w") as f:
