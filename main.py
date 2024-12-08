@@ -41,6 +41,7 @@ class FlatmatesScraper:
         self.scraped_links = self.read_scraped_links()
 
     async def run(self):
+        logger.info("Starting the scraper")
         # with Xvfb():
         async with webdriver.Chrome(options=self.options) as self.driver:
             await self.driver.maximize_window()
@@ -65,12 +66,15 @@ class FlatmatesScraper:
                         "price_per_week,beds,baths,persons,room_overview,property_features,property_about,flatmates_about\n"
                     )
 
+            logger.info(f"Starting to scrape {len(all_listing_links)} listing links")
             for link in all_listing_links:
+                logger.info(f"Scraping {link}")
                 listing_data = await self.get_listing_data(link)
                 if listing_data is not None:
                     df = pd.DataFrame([listing_data.__dict__])
                     df.to_csv("listing_data.csv", mode="a", header=False, index=False)
                     self.save_scraped_link(link)
+                logger.info(f"Scraped {link}")
 
     async def extract_all_listing_links(self):
         page_num = 1
