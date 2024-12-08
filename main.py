@@ -7,7 +7,8 @@ from selenium_driverless import webdriver
 from selenium_driverless.types.by import By
 from selenium_driverless.types.webelement import NoSuchElementException
 import asyncio
-from xvfbwrapper import Xvfb
+
+# from xvfbwrapper import Xvfb
 from dataclasses import dataclass
 import pandas as pd
 import os
@@ -193,7 +194,7 @@ class FlatmatesScraper:
             )
 
         except NoSuchElementException:
-            logger.warning("Unable to find listing data from page")
+            logger.warning(f"Unable to find listing data from page: {listing_link}")
             return
 
     def read_scraped_links(self):
