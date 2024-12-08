@@ -1,0 +1,3 @@
+selenium_driverless==1.9.4
+rich==13.9.4
+pandas==2.2.3
