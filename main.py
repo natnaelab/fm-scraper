@@ -33,44 +33,43 @@ logger = logging.getLogger(__name__)
 
 
 class FlatmatesScraper:
-    def __init__(self):
+    def __init__(self, base_url=None):
         self.options = webdriver.ChromeOptions()
         self.driver = None
-        self.base_url = "https://flatmates.com.au/rooms/sunshine-coast/4-weeks+earliest-available+furnished+max-500+off-street-parking?search_source=search_function"
+        self.base_url = base_url
         self.scraped_links = self.read_scraped_links()
 
     async def run(self):
-        with Xvfb():
-            async with webdriver.Chrome(options=self.options) as self.driver:
-                await self.driver.maximize_window()
-                await self.driver.get(self.base_url, timeout=120, wait_load=True)
-                await self.driver.wait_for_cdp("Page.domContentEventFired", timeout=120)
-                logger.info("Loaded the base page")
+        # with Xvfb():
+        async with webdriver.Chrome(options=self.options) as self.driver:
+            await self.driver.maximize_window()
+            await self.driver.get(self.base_url, timeout=120, wait_load=True)
+            await self.driver.wait_for_cdp("Page.domContentEventFired", timeout=120)
+            logger.info("Loaded the base page")
 
-                all_listing_links = await self.extract_all_listing_links()
-                all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
-                logger.info(f"Extracted {len(all_listing_links)} new listing links in total from pages")
+            # all_listing_links = await self.extract_all_listing_links()
+            # all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
+            # logger.info(f"Extracted {len(all_listing_links)} new listing links in total from pages")
 
-                # get listing links from file instead, uncomment the following code if you already have listing links
-                # Load listing links from file
-                # if os.path.exists("listing_links.json"):
-                #     with open("listing_links.json", "r") as f:
-                #         all_listing_links = json.load(f)
-                #         all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
-                #         logger.info(f"Loaded {len(all_listing_links)} listing links from listing_links.json")
+            # get listing links from file instead, uncomment the following code if you already have listing links
+            if os.path.exists("listing_links.json"):
+                with open("listing_links.json", "r") as f:
+                    all_listing_links = json.load(f)
+                    all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
+                    logger.info(f"Loaded {len(all_listing_links)} listing links from listing_links.json")
 
-                if not os.path.exists("listing_data.csv"):
-                    with open("listing_data.csv", "w") as f:
-                        f.write(
-                            "price_per_week,beds,baths,persons,room_overview,property_features,property_about,flatmates_about\n"
-                        )
+            if not os.path.exists("listing_data.csv"):
+                with open("listing_data.csv", "w") as f:
+                    f.write(
+                        "price_per_week,beds,baths,persons,room_overview,property_features,property_about,flatmates_about\n"
+                    )
 
-                for link in all_listing_links:
-                    listing_data = await self.get_listing_data(link)
-                    if listing_data is not None:
-                        df = pd.DataFrame([listing_data.__dict__])
-                        df.to_csv("listing_data.csv", mode="a", header=False, index=False)
-                        self.save_scraped_link(link)
+            for link in all_listing_links:
+                listing_data = await self.get_listing_data(link)
+                if listing_data is not None:
+                    df = pd.DataFrame([listing_data.__dict__])
+                    df.to_csv("listing_data.csv", mode="a", header=False, index=False)
+                    self.save_scraped_link(link)
 
     async def extract_all_listing_links(self):
         page_num = 1
@@ -144,9 +143,9 @@ class FlatmatesScraper:
                 By.XPATH,
                 ".//div[starts-with(@class, 'styles__propertyMainFeatures___')]/div[starts-with(@class, 'styles__propertyFeature___')]/div[starts-with(@class, 'styles__value___')]",
             )
-            beds = int(await property_main_features[0].text)
-            baths = int(await property_main_features[1].text)
-            persons = int(await property_main_features[2].text)
+            beds = await property_main_features[0].text if len(property_main_features) > 0 else "N/A"
+            baths = await property_main_features[1].text if len(property_main_features) > 1 else "N/A"
+            persons = await property_main_features[2].text if len(property_main_features) > 2 else "N/A"
 
             property_about_el = await listing_data_el.find_element(
                 By.XPATH, "//div[starts-with(@class, 'styles__description__wrapper')]/p"
@@ -209,4 +208,10 @@ class FlatmatesScraper:
 
 
 if __name__ == "__main__":
-    asyncio.run(FlatmatesScraper().run())
+    input_url = input("Please input the URL of the filtered listing page: ")
+
+    pattern = r"^(https?:\/\/)?(www\.)?flatmates\.com\.au\/?.*$"
+    if not re.match(pattern, input_url):
+        raise ValueError(f"Invalid URL: {input_url}")
+
+    asyncio.run(FlatmatesScraper(input_url).run())
