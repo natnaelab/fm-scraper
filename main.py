@@ -24,6 +24,8 @@ class ListingData:
     property_features: str
     property_about: str
     flatmates_about: str
+    district: str
+    url: str
 
 
 logging.basicConfig(
@@ -67,14 +69,14 @@ class FlatmatesScraper:
                     )
 
             logger.info(f"Starting to scrape {len(all_listing_links)} listing links")
-            for link in all_listing_links:
+            for i, link in enumerate(all_listing_links):
                 logger.info(f"Scraping {link}")
                 listing_data = await self.get_listing_data(link)
                 if listing_data is not None:
                     df = pd.DataFrame([listing_data.__dict__])
                     df.to_csv("listing_data.csv", mode="a", header=False, index=False)
                     self.save_scraped_link(link)
-                logger.info(f"Scraped {link}")
+                logger.info(f"Scraped {i + 1}/{len(all_listing_links)} pages")
 
     async def extract_all_listing_links(self):
         page_num = 1
@@ -206,6 +208,14 @@ class FlatmatesScraper:
         except NoSuchElementException:
             flatmates_about = "N/A"
 
+        try:
+            district_el = await listing_data_el.find_element(
+                By.XPATH, "//section[starts-with(@class, 'styles__left___')]/div[not(@*)]/h1"
+            )
+            district = await district_el.text
+        except NoSuchElementException:
+            district = "N/A"
+
         return ListingData(
             price_per_week=price_per_week,
             beds=beds,
@@ -215,6 +225,8 @@ class FlatmatesScraper:
             property_features=property_features,
             property_about=property_about,
             flatmates_about=flatmates_about,
+            district=district,
+            url=listing_link,
         )
 
     def read_scraped_links(self):
