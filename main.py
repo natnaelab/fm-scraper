@@ -1,4 +1,3 @@
-import json
 import logging
 import re
 from time import sleep
@@ -16,6 +15,8 @@ import os
 
 @dataclass
 class ListingData:
+    url: str
+    district: str
     price_per_week: int
     beds: int
     baths: int
@@ -24,8 +25,6 @@ class ListingData:
     property_features: str
     property_about: str
     flatmates_about: str
-    district: str
-    url: str
 
 
 logging.basicConfig(
@@ -55,17 +54,10 @@ class FlatmatesScraper:
             all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
             logger.info(f"Extracted {len(all_listing_links)} new listing links in total from pages")
 
-            # get listing links from file instead, uncomment the following code if you already have listing links
-            # if os.path.exists("listing_links.json"):
-            #     with open("listing_links.json", "r") as f:
-            #         all_listing_links = json.load(f)
-            #         all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
-            #         logger.info(f"Loaded {len(all_listing_links)} listing links from listing_links.json")
-
             if not os.path.exists("listing_data.csv"):
                 with open("listing_data.csv", "w") as f:
                     f.write(
-                        "price_per_week,beds,baths,persons,room_overview,property_features,property_about,flatmates_about\n"
+                        "url,district,price_per_week,beds,baths,persons,room_overview,property_features,property_about,flatmates_about\n"
                     )
 
             logger.info(f"Starting to scrape {len(all_listing_links)} listing links")
@@ -217,6 +209,8 @@ class FlatmatesScraper:
             district = "N/A"
 
         return ListingData(
+            url=listing_link,
+            district=district,
             price_per_week=price_per_week,
             beds=beds,
             baths=baths,
@@ -225,8 +219,6 @@ class FlatmatesScraper:
             property_features=property_features,
             property_about=property_about,
             flatmates_about=flatmates_about,
-            district=district,
-            url=listing_link,
         )
 
     def read_scraped_links(self):
