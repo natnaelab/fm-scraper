@@ -6,8 +6,9 @@ from selenium_driverless import webdriver
 from selenium_driverless.types.by import By
 from selenium_driverless.types.webelement import NoSuchElementException
 import asyncio
+import json
+from urllib.parse import urlparse
 
-# from xvfbwrapper import Xvfb
 from dataclasses import dataclass
 import pandas as pd
 import os
@@ -22,6 +23,7 @@ class ListingData:
     baths: int
     persons: int
     room_overview: str
+    availability_min_stay: str
     property_features: str
     property_about: str
     flatmates_about: str
@@ -37,45 +39,72 @@ logger = logging.getLogger(__name__)
 class FlatmatesScraper:
     def __init__(self, base_url=None):
         self.options = webdriver.ChromeOptions()
+        # Disable image loading for faster page load
+        self.options.add_argument("--blink-settings=imagesEnabled=false")
         self.driver = None
         self.base_url = base_url
         self.scraped_links = self.read_scraped_links()
+        self.listings_cache_file = "listings_cache.json"
+        self.url_slug = urlparse(base_url).path.strip("/").replace("/", "-")
+        self.csv_filename = f"listing_data_{self.url_slug}.csv"
 
     async def run(self):
         logger.info("Starting the scraper")
-        # with Xvfb():
+
+        # Check if we have cached listings for this URL
+        cached_listings = self.get_cached_listings()
+        if cached_listings and cached_listings.get("filter_url") == self.base_url:
+            logger.info("Using cached listing links")
+            all_listing_links = cached_listings.get("listing_links", [])
+        else:
+            # Fetch new listings
+            async with webdriver.Chrome(options=self.options) as self.driver:
+                await self.driver.maximize_window()
+                await self.driver.get(self.base_url, timeout=30, wait_load=True)
+                await self.driver.wait_for_cdp("Page.domContentEventFired", timeout=30)
+                logger.info("Loaded the base page")
+
+                all_listing_links = await self.extract_all_listing_links()
+                # Cache the listings
+                self.cache_listings(all_listing_links)
+
+        all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
+        logger.info(f"Found {len(all_listing_links)} new listing links to process")
+
+        if not os.path.exists(self.csv_filename):
+            with open(self.csv_filename, "w") as f:
+                f.write(
+                    "url,district,price_per_week,beds,baths,persons,room_overview,availability_min_stay,property_features,property_about,flatmates_about\n"
+                )
+
+        logger.info(f"Starting to scrape {len(all_listing_links)} listing links")
         async with webdriver.Chrome(options=self.options) as self.driver:
-            await self.driver.maximize_window()
-            await self.driver.get(self.base_url, timeout=120, wait_load=True)
-            await self.driver.wait_for_cdp("Page.domContentEventFired", timeout=120)
-            logger.info("Loaded the base page")
-
-            all_listing_links = await self.extract_all_listing_links()
-            all_listing_links = [link for link in all_listing_links if link not in self.scraped_links]
-            logger.info(f"Extracted {len(all_listing_links)} new listing links in total from pages")
-
-            if not os.path.exists("listing_data.csv"):
-                with open("listing_data.csv", "w") as f:
-                    f.write(
-                        "url,district,price_per_week,beds,baths,persons,room_overview,property_features,property_about,flatmates_about\n"
-                    )
-
-            logger.info(f"Starting to scrape {len(all_listing_links)} listing links")
             for i, link in enumerate(all_listing_links):
                 logger.info(f"Scraping {link}")
                 listing_data = await self.get_listing_data(link)
                 if listing_data is not None:
                     df = pd.DataFrame([listing_data.__dict__])
-                    df.to_csv("listing_data.csv", mode="a", header=False, index=False)
+                    df.to_csv(self.csv_filename, mode="a", header=False, index=False)
                     self.save_scraped_link(link)
                 logger.info(f"Scraped {i + 1}/{len(all_listing_links)} pages")
+
+    def get_cached_listings(self):
+        if os.path.exists(self.listings_cache_file):
+            with open(self.listings_cache_file, "r") as f:
+                return json.load(f)
+        return None
+
+    def cache_listings(self, listing_links):
+        cache_data = {"filter_url": self.base_url, "listing_links": listing_links}
+        with open(self.listings_cache_file, "w") as f:
+            json.dump(cache_data, f)
 
     async def extract_all_listing_links(self):
         page_num = 1
         all_listing_links = []
         while True:
             separator = "&" if "?" in self.base_url else "?"
-            await self.driver.get(f"{self.base_url}{separator}page={page_num}", timeout=120, wait_load=True)
+            await self.driver.get(f"{self.base_url}{separator}page={page_num}", timeout=30, wait_load=True)
             sleep(3)
             await self.driver.execute_script("return document.readyState")
 
@@ -83,7 +112,7 @@ class FlatmatesScraper:
                 await self.driver.find_element(
                     By.XPATH,
                     ".//div[starts-with(@class, 'styles__listings___')]/div[starts-with(@class, 'styles__listingTileBox___')]",
-                    timeout=120,
+                    timeout=30,
                 )
             except NoSuchElementException:
                 logger.warning("No such element found for listing tile")
@@ -94,7 +123,7 @@ class FlatmatesScraper:
             logger.info(f"Extracted {len(listing_links)} listing links from page {page_num}")
 
             try:
-                await self.driver.find_element(By.XPATH, ".//a[@aria-label='Go to next page']", timeout=120)
+                await self.driver.find_element(By.XPATH, ".//a[@aria-label='Go to next page']", timeout=30)
                 page_num += 1
             except NoSuchElementException:
                 logger.info("No next page element found, stopping")
@@ -106,7 +135,7 @@ class FlatmatesScraper:
         listing_tiles = await self.driver.find_elements(
             By.XPATH,
             ".//div[starts-with(@class, 'styles__listings___')]/div[starts-with(@class, 'styles__listingTileBox___')]",
-            timeout=120,
+            timeout=30,
         )
 
         listing_links = []
@@ -123,13 +152,13 @@ class FlatmatesScraper:
         return listing_links
 
     async def get_listing_data(self, listing_link) -> ListingData:
-        await self.driver.get(listing_link, timeout=120, wait_load=True)
+        await self.driver.get(listing_link, timeout=30, wait_load=True)
         sleep(3)
         await self.driver.execute_script("return document.readyState")
 
         try:
             listing_data_el = await self.driver.find_element(
-                By.XPATH, "//*[@initial_tracking_context_schema_data]", timeout=120
+                By.XPATH, "//*[@initial_tracking_context_schema_data]", timeout=30
             )
         except NoSuchElementException:
             return logger.warning("No such element found for listing data")
@@ -177,6 +206,7 @@ class FlatmatesScraper:
                 "//div[starts-with(@class, 'styles__roomDetails___')]//div[starts-with(@class, 'styles__detail___')]",
             )
             room_overview = []
+            availability_min_stay = "N/A"
             for text_el in room_overview_els:
                 title_el = await text_el.find_element(
                     By.XPATH, ".//span[starts-with(@class, 'styles__detail__title___')]"
@@ -184,9 +214,13 @@ class FlatmatesScraper:
                 subtitle_el = await text_el.find_element(
                     By.XPATH, ".//span[starts-with(@class, 'styles__detail__subTitle___')]"
                 )
-                room_overview.append(
-                    f"{await title_el.text}{f' ({await subtitle_el.text})' if (await subtitle_el.text).strip() else ''}"
-                )
+                title_text = (await title_el.text).strip()
+                subtitle_text = (await subtitle_el.text).strip()
+                room_overview.append(f"{title_text}{f' ({subtitle_text})' if subtitle_text else ''}")
+
+                if "stay" in title_text or "Available" in subtitle_text:
+                    availability_min_stay = f"{title_text}{f' ({subtitle_text})' if subtitle_text else ''}"
+
             room_overview = ", ".join(room_overview)
         except NoSuchElementException:
             room_overview = "N/A"
@@ -216,6 +250,7 @@ class FlatmatesScraper:
             baths=baths,
             persons=persons,
             room_overview=room_overview,
+            availability_min_stay=availability_min_stay,
             property_features=property_features,
             property_about=property_about,
             flatmates_about=flatmates_about,
